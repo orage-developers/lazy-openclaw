@@ -1,6 +1,7 @@
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 import { toolPluginMetadataSymbol } from "openclaw/plugin-sdk/tool-plugin";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-entry";
+import { registerLazyLoadingCli } from "./cli/register.js";
 import { LAZY_LOAD_TOOLS_NAME, lazyLoadToolsMetadata } from "./tools/lazy-load-tools.js";
 
 type PluginEntry = ReturnType<typeof definePluginEntry>;
@@ -40,6 +41,9 @@ export function composeFeatureEntry(
     register(api: OpenClawPluginApi) {
       feature.register(api);
       extra.register(api);
+      // Older host test doubles may omit CLI registration; supported OpenClaw
+      // versions always expose it. Keep feature setup independently testable.
+      if (typeof api.registerCli === "function") registerLazyLoadingCli(api);
     },
   });
   const baseMetadata = (feature as unknown as Record<symbol, ToolPluginMetadata | undefined>)[
