@@ -69,9 +69,9 @@ plugins.entries["lazy-loading"].config = {
 - **Aceptación**: config inválida falla en `openclaw plugins validate` con mensaje claro. _Nota: el host valida la forma (JSON Schema, `openclaw config validate`); las reglas semánticas (core∩never, ids de agente) se aplican al cargar el plugin con `parseConfig`. `defaultMode` por defecto es `native` (ver `docs/baseline.md`)._
 
 ### F-03 · Catálogo de tools por agente
-- [ ] Resolver tools efectivas de cada agente tras políticas (`allow`, `alsoAllow`, profile, sandbox).
-- [ ] Calcular tamaño estimado de cada schema (bytes y tokens aprox.).
-- [ ] Generar descriptores compactos (nombre, descripción corta, firma de input).
+- [x] Resolver tools efectivas de cada agente tras políticas (`allow`, `alsoAllow`, profile, sandbox). _El host no expone una API a plugins externos (`tools.catalog` por gateway es solo para operadores): el inventario se observa en `llm_input` (post-política real) o lo aporta quien llama; ver `src/catalog/inventory.ts`._
+- [x] Calcular tamaño estimado de cada schema (bytes y tokens aprox.).
+- [x] Generar descriptores compactos (nombre, descripción corta, firma de input).
 - **Aceptación**: operación `catalog(agentId)` devuelve lista con `core | deferred | never` y tamaño.
 
 ### F-04 · Modo `plugin`: superficie mínima por turno
