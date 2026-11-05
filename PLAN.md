@@ -75,26 +75,26 @@ plugins.entries["lazy-loading"].config = {
 - **Aceptación**: operación `catalog(agentId)` devuelve lista con `core | deferred | never` y tamaño.
 
 ### F-04 · Modo `plugin`: superficie mínima por turno
-- [ ] Hook `before_prompt_build` devuelve `toolsAllow = core ∪ predichas ∪ activadas`, ordenado de forma determinista.
-- [ ] Respetar que `toolsAllow` solo puede estrechar; nunca intentar añadir tools fuera de política.
-- [ ] Saltar el hook (sin restringir) si el harness es Codex y avisar una vez en logs.
-- **Aceptación**: con un prompt simple, el payload al proveedor contiene solo core + `lazy_load_tools`.
+- [x] Hook `before_prompt_build` devuelve `toolsAllow = core ∪ predichas ∪ activadas`, ordenado de forma determinista.
+- [x] Respetar que `toolsAllow` solo puede estrechar; nunca intentar añadir tools fuera de política.
+- [x] Saltar el hook (sin restringir) si el harness es Codex; también si es desconocido. _Pendiente: aviso de log único para Codex._
+- **Aceptación**: prueba unitaria verifica el set determinista; pendiente prueba host/proveedor real del payload.
 
 ### F-05 · Tool `lazy_load_tools`
-- [ ] Input: `{ query?: string; names?: string[] }`. Busca en el catálogo (BM25 léxico o exact match) y activa las tools en el estado de la sesión.
-- [ ] Output: tools activadas con firma compacta y aviso de cuándo estarán disponibles (según F-00).
-- [ ] Registrada como `direct-only` y siempre en `toolsAllow`.
-- **Aceptación**: el agente pide "crear issue en GitHub", llama `lazy_load_tools`, y en el siguiente paso usa la tool real.
+- [x] Input: `{ query?: string; names?: string[] }`. Busca en el catálogo (match léxico acotado o exact match) y activa las tools en el estado de la sesión.
+- [x] Output: tools activadas con firma compacta y aviso de que estarán disponibles en el próximo turno (F-00).
+- [x] Registrada como `direct-only` y siempre en `toolsAllow` cuando el modo plugin aplica.
+- **Aceptación**: prueba de servicio carga nombre exacto y verifica la disponibilidad en el siguiente build de prompt; pendiente recorrido host/modelo real.
 
 ### F-06 · Estado de sesión y expiración
-- [ ] Guardar tools activadas por `sessionKey` con contador de turnos (`stickyTurns`).
-- [ ] Limpiar al cerrar sesión / `reset`.
-- **Aceptación**: tras N turnos sin uso, la tool desaparece del set visible.
+- [x] Guardar tools activadas por `sessionKey` con contador de turnos (`stickyTurns`) en memoria de proceso.
+- [x] Limpiar al cerrar sesión / `reset` (`session_end`, `reset-session` por sesión o agente).
+- **Aceptación**: pruebas unitarias verifican visibilidad por N turnos desde la activación y expiración. _No se renueva al usar la tool y no persiste tras reiniciar Gateway._
 
 ### F-07 · Predictor de intención (precarga)
-- [ ] En `before_prompt_build`, usar `currentUserMessage` (no el historial) para predecir tools (keywords + BM25 sobre descriptores).
-- [ ] Limitar a `maxPredicted`; respetar `never`.
-- **Aceptación**: en un set de prompts de prueba, ≥80 % de las tools usadas estaban predichas o en core.
+- [x] En `before_prompt_build`, usar `currentUserMessage` (no el historial) para predecir tools sobre descriptores.
+- [x] Limitar a `maxPredicted`; respetar `never` y `core`.
+- [x] **Aceptación**: fixtures de prompts superan ≥80 % de cobertura top-5 en pruebas unitarias; no es medida de producción.
 
 ### F-08 · Modo `native`
 - [ ] Escribir/leer config de `tools.toolSearch` (modo, límites) por agente o global según F-00.
@@ -108,9 +108,9 @@ plugins.entries["lazy-loading"].config = {
 - **Aceptación**: operación `stats(agentId, since)` devuelve medias p50/p95 de TTFT antes/después.
 
 ### F-10 · Feature contract (operaciones compartidas)
-- [x] Queries: `status`, `catalog`, `stats`, `sessionState`. _`status` y `catalog` implementadas; `stats` (F-09) y `sessionState` (F-06) son stubs con error tipado `NOT_IMPLEMENTED`. Ids en kebab-case (`session-state`): el SDK exige minúsculas. Ver `plugins/lazy-loading/docs/contract.md`._
-- [x] Actions: `setMode`, `setAgentEnabled`, `setToolClass` (core/deferred/never), `resetSession`, `runBenchmark`. _Las tres primeras implementadas; `resetSession` (F-06) y `runBenchmark` (F-11) son stubs._
-- [x] Eventos: `configChanged`, `statsUpdated`, `toolsLoaded` (+ `benchmark-progress`). _`config-changed` se emite ya; el resto cuando existan F-05/F-07/F-09/F-11._
+- [x] Queries: `status`, `catalog`, `stats`, `sessionState`. _`session-state` implementada; `stats` (F-09) sigue stub. Ids en kebab-case (`session-state`): el SDK exige minúsculas. Ver `plugins/lazy-loading/docs/contract.md`._
+- [x] Actions: `setMode`, `setAgentEnabled`, `setToolClass` (core/deferred/never), `resetSession`, `runBenchmark`. _`reset-session` implementada; `runBenchmark` (F-11) sigue stub._
+- [x] Eventos: `configChanged`, `statsUpdated`, `toolsLoaded` (+ `benchmark-progress`). _`config-changed` y `tools-loaded` se emiten; stats/benchmark siguen pendientes._
 - **Aceptación**: UI, CLI y slash command usan solo estas operaciones.
 
 ### F-11 · Benchmark
@@ -118,8 +118,8 @@ plugins.entries["lazy-loading"].config = {
 - **Aceptación**: reporte reproducible; meta ≤10 s en tareas simples.
 
 ### F-12 · Tests
-- [ ] Unit: predictor, cálculo de `toolsAllow`, expiración sticky, validación de config.
-- [ ] Integración: escenario con proveedor mock (patrón `qa suite --provider-mode mock-openai`) comparando payloads.
+- [x] Unit: predictor, cálculo de `toolsAllow`, expiración sticky y validación de config.
+- [ ] Integración: escenario con proveedor mock comparando payloads; prueba host/proveedor real aún pendiente.
 
 ---
 
@@ -159,7 +159,7 @@ Raíz: `openclaw lazy-loading` (alias `openclaw lazy`), registrada con `api.regi
 - [ ] `/lazy` (status de la sesión), `/lazy load <tool|query>`, `/lazy reset`. Registrado con `api.registerCommand`, `requireAuth: true`.
 
 ### C-11 · Docs del CLI
-- [ ] Sección en README con ejemplos y salida `--json` estable.
+- [x] Sección en README con ejemplos y formato JSON estable enlazado a [docs/cli.md](plugins/lazy-loading/docs/cli.md).
 
 ---
 

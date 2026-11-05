@@ -17,11 +17,11 @@ Each agent runs in one of three modes:
 
 | Mode | What the model sees | How it gets more tools |
 | --- | --- | --- |
-| `plugin` | Core tools + predicted tools + tools already loaded in the session | Calls `lazy_load_tools` with a query or tool names |
-| `native` | OpenClaw's built-in [Tool Search](https://docs.openclaw.ai/tools/tool-search), configured by this plugin | `tool_search` / `tool_describe` / `tool_call` |
+| `plugin` | Core tools + predicted tools + tools loaded for this session | Calls `lazy_load_tools`; newly loaded tools become available on the **next turn** |
+| `native` | OpenClaw's built-in [Tool Search](https://docs.openclaw.ai/tools/tool-search) (plugin configuration is not implemented yet) | `tool_search` / `tool_describe` / `tool_call` |
 | `off` | Default OpenClaw behavior | — |
 
-Loaded tools stay visible for a few turns ("sticky") so the tool list stays stable and prompt caching keeps working. An intent predictor preloads tools that the current message is likely to need.
+Loaded tools stay visible for a configured number of turns ("sticky"). An intent predictor preloads tools that the current user message is likely to need. This mode skips Codex/CLI and unknown runtimes; Codex already defers schemas and rejects restrictive `toolsAllow`. Session state is process-local and does not survive a Gateway restart. See [runtime semantics and MVP limits](plugins/lazy-loading/docs/runtime.md) and the [predictor notes](plugins/lazy-loading/docs/predictor.md).
 
 ## Requirements
 
@@ -53,6 +53,8 @@ openclaw lazy-loading stats [--agent <id>] [--since 24h]
 openclaw lazy-loading bench --agent <id> --prompt "..." [--runs 3]
 openclaw lazy-loading reset --session <key> | --agent <id>
 ```
+
+`status --json` and `catalog --json` return the feature-contract result shape; see the [CLI guide](plugins/lazy-loading/docs/cli.md) for examples and compatibility details. Some planned commands (`stats`, `bench`, `reset`) are not exposed by the current CLI release.
 
 In chat: `/lazy`, `/lazy load <tool|query>`, `/lazy reset`.
 

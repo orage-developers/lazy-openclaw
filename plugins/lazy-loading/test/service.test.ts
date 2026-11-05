@@ -5,6 +5,7 @@ import { CONTRACT_VERSION } from "../src/contract.js";
 import { ERROR_CODES, LazyLoadingError, parseErrorCode } from "../src/errors.js";
 import { createHandlers } from "../src/service.js";
 import { MemoryConfigStore } from "../src/state/config-store.js";
+import { SessionStore } from "../src/state/session-store.js";
 
 const hostConfig = {
   plugins: { entries: { codex: { enabled: true } } },
@@ -22,17 +23,19 @@ const ctx = { source: "session-action" } as never; // handlers here ignore the i
 function setup(initial?: unknown) {
   const store = new MemoryConfigStore(initial);
   const inventory = new InventoryStore();
+  const sessions = new SessionStore();
   const emitted: { event: string; payload: unknown }[] = [];
   let clock = 1_000;
   const handlers = createHandlers({
     pluginVersion: "9.9.9",
     configStore: store,
     inventory,
+    sessions,
     getHostConfig: () => hostConfig,
     events: { emit: (event, payload) => void emitted.push({ event, payload }) },
     now: () => clock++,
   });
-  return { store, inventory, emitted, handlers };
+  return { store, inventory, sessions, emitted, handlers };
 }
 
 const tools = [
@@ -232,8 +235,6 @@ describe("set-tool-class", () => {
 describe("stubs", () => {
   const stubs = [
     ["stats", "F-09"],
-    ["session-state", "F-06"],
-    ["reset-session", "F-06"],
     ["run-benchmark", "F-11"],
   ] as const;
 
@@ -251,6 +252,22 @@ describe("stubs", () => {
       );
     });
   }
+
+  it("reports session state and clears one session or all sessions for an agent", async () => {
+    const { handlers, sessions } = setup();
+    sessions.activate("scout-local:one", "scout-local", ["browser"], 4, 12);
+    sessions.activate("coordinator:one", "coordinator", ["read"], 3, 14);
+    assert.deepEqual(await handlers["session-state"]({ sessionKey: "scout-local:one" }, ctx), {
+      sessionKey: "scout-local:one", agentId: "scout-local", stickyTurns: 4,
+      tools: [{ name: "browser", origin: "loaded", activatedAt: 12, turnsRemaining: 4 }], misses: [],
+    });
+    assert.deepEqual(await handlers["reset-session"]({ agentId: "scout-local" }, ctx), { cleared: 1 });
+    assert.deepEqual(await handlers["session-state"]({ sessionKey: "coordinator:one" }, ctx), {
+      sessionKey: "coordinator:one", agentId: "coordinator", stickyTurns: 3,
+      tools: [{ name: "read", origin: "loaded", activatedAt: 14, turnsRemaining: 3 }], misses: [],
+    });
+    await assert.rejects(async () => handlers["reset-session"]({}, ctx), (error: unknown) => error instanceof LazyLoadingError && error.code === "INVALID_ARGUMENT");
+  });
 });
 
 describe("error codes", () => {

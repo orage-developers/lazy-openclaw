@@ -9,7 +9,9 @@ import { CONTRACT_VERSION, type LazyLoadingContract } from "./contract.js";
 import { LazyLoadingError, notImplemented } from "./errors.js";
 import { resolveEffectiveMode, resolveHarness, type Harness } from "./harness.js";
 import type { ConfigStore } from "./state/config-store.js";
+import { SessionStore } from "./state/session-store.js";
 import { LAZY_LOAD_TOOLS_NAME } from "./tools/lazy-load-tools.js";
+import { predictTools } from "./predictor/index.js";
 
 export type ServiceDeps = {
   pluginVersion: string;
@@ -19,6 +21,7 @@ export type ServiceDeps = {
   getHostConfig: () => unknown;
   events?: FeatureEventEmitter<LazyLoadingContract>;
   now?: () => number;
+  sessions?: SessionStore;
 };
 
 type Handlers = FeatureHandlers<LazyLoadingContract>;
@@ -51,6 +54,7 @@ function harnessNote(harness: Harness, mode: Mode): string | undefined {
 
 export function createHandlers(deps: ServiceDeps): Handlers {
   const now = deps.now ?? Date.now;
+  const sessions = deps.sessions ?? new SessionStore();
 
   async function load(): Promise<Loaded> {
     const parsed = parseConfig(await deps.configStore.read());
@@ -142,8 +146,9 @@ export function createHandlers(deps: ServiceDeps): Handlers {
       throw notImplemented("stats", "F-09");
     },
 
-    async "session-state"() {
-      throw notImplemented("session-state", "F-06");
+    async "session-state"({ sessionKey }) {
+      const state = sessions.get(sessionKey);
+      return { ...state, tools: state.tools.slice(0, 256), misses: state.misses.slice(-64) };
     },
 
     // ---------------------------------------------------------------- actions
@@ -199,12 +204,54 @@ export function createHandlers(deps: ServiceDeps): Handlers {
       return { changed, agentId, tool, class: toolClass, previousClass, core: after.core, never: after.never };
     },
 
-    async "reset-session"() {
-      throw notImplemented("reset-session", "F-06");
+    async "reset-session"({ sessionKey, agentId }) {
+      if (!sessionKey && !agentId) throw new LazyLoadingError("INVALID_ARGUMENT", "provide sessionKey or agentId; clearing all sessions is not supported");
+      return { cleared: sessions.clear(sessionKey, agentId) };
     },
 
     async "run-benchmark"() {
       throw notImplemented("run-benchmark", "F-11");
     },
   };
+}
+
+/** Resolve a conservative per-turn allow list. Unknown/Codex/CLI harnesses never receive toolsAllow. */
+export async function buildToolsAllow(deps: ServiceDeps, sessions: SessionStore, params: { agentId?: string; sessionKey?: string; message?: string }): Promise<string[] | undefined> {
+  if (!params.agentId || !params.sessionKey) return undefined;
+  const parsed = parseConfig(await deps.configStore.read());
+  if (!parsed.ok) return undefined;
+  const config = parsed.config;
+  const agent = resolveAgentConfig(config, params.agentId);
+  const harness = resolveHarness(deps.getHostConfig(), params.agentId).harness;
+  if (resolveEffectiveMode({ enabled: agent.enabled, pluginEnabled: config.enabled, mode: agent.mode, harness }).mode !== "plugin") return undefined;
+  const catalog = buildCatalog({ agent, inventory: deps.inventory.get(params.agentId) });
+  if (!catalog.available) return undefined; // observed inventory is not a complete inventory guarantee
+  const state = sessions.advance(params.sessionKey, agent.stickyTurns, params.agentId);
+  const predicted = agent.predict && config.predictor.enabled
+    ? predictTools({ message: params.message ?? "", entries: catalog.entries, maxPredicted: config.predictor.maxPredicted, minScore: config.predictor.minScore, never: agent.never, core: agent.core })
+    : [];
+  if (predicted.length) sessions.activate(params.sessionKey, params.agentId, predicted.map((tool) => tool.name), agent.stickyTurns, (deps.now ?? Date.now)(), "predicted");
+  const allow = new Set([...catalog.entries.filter((entry) => entry.class === "core").map((entry) => entry.name), ...state.tools.map((tool) => tool.name), ...predicted.map((tool) => tool.name), LAZY_LOAD_TOOLS_NAME]);
+  return [...allow].sort();
+}
+
+export async function loadTools(deps: ServiceDeps, sessions: SessionStore, params: { agentId?: string; sessionKey?: string; query?: string; names?: string[] }) {
+  if (!params.agentId || !params.sessionKey) throw new LazyLoadingError("INVALID_ARGUMENT", "agentId and sessionKey are required");
+  const parsed = parseConfig(await deps.configStore.read());
+  if (!parsed.ok) throw new LazyLoadingError("CONFIG_INVALID", `fix the plugin config first: ${formatIssues(parsed.issues)}`);
+  const agent = resolveAgentConfig(parsed.config, params.agentId);
+  const catalog = buildCatalog({ agent, inventory: deps.inventory.get(params.agentId) });
+  if (!catalog.available) throw new LazyLoadingError("INVALID_ARGUMENT", "tool inventory unavailable; provide tools through catalog first");
+  const deferred = catalog.entries.filter((entry) => entry.class === "deferred");
+  let selected = params.names?.length ? deferred.filter((entry) => params.names!.includes(entry.name)) : [];
+  if (!params.names?.length && params.query) {
+    const terms = params.query.toLowerCase().match(/[a-z0-9_]+/gu) ?? [];
+    selected = deferred.map((entry) => ({ entry, score: terms.filter((term) => `${entry.name} ${entry.description} ${entry.signature}`.toLowerCase().includes(term)).length }))
+      .filter((item) => item.score > 0).sort((a, b) => b.score - a.score || a.entry.name.localeCompare(b.entry.name)).slice(0, 8).map(({ entry }) => entry);
+  }
+  const names = [...new Set(selected.map((entry) => entry.name))].slice(0, 16);
+  if (!names.length) return { text: "No eligible tools matched. Only deferred catalog tools can be loaded; never/core tools cannot be changed.", tools: [] };
+  sessions.activate(params.sessionKey, params.agentId, names, agent.stickyTurns, (deps.now ?? Date.now)());
+  try { deps.events?.emit("tools-loaded", { sessionKey: params.sessionKey, agentId: params.agentId, tools: names, origin: "loaded", at: (deps.now ?? Date.now)() }); } catch { /* best effort */ }
+  return { text: `Activated for the next turn (OpenClaw computes toolsAllow once per attempt; these cannot be called in this turn).`, tools: selected.map((entry) => ({ name: entry.name, signature: entry.signature, description: entry.description })) };
 }

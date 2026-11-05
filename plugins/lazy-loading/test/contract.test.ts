@@ -36,7 +36,9 @@ function load(pluginConfig?: unknown) {
   const api = {
     id: "lazy-loading",
     registerSessionAction: (action: Action) => void actions.set(action.id, action),
-    registerTool: (tool: { name: string; catalogMode?: string }) => void tools.push(tool),
+    registerTool: (tool: { name: string; catalogMode?: string } | ((ctx: { agentId: string; sessionKey: string }) => { name: string; catalogMode?: string })) => {
+      tools.push(typeof tool === "function" ? tool({ agentId: "scout-local", sessionKey: "scout-local:test" }) : tool);
+    },
     registerService: (service: { start(context: unknown): void }) => void services.push(service),
     registerCommand: () => undefined,
     on: (name: string) => void hooks.push(name),
@@ -96,10 +98,10 @@ describe("registration through the OpenClaw feature runtime", () => {
     }
   });
 
-  it("registers lazy_load_tools as a direct-only tool and the llm_input observer", () => {
+  it("registers lazy_load_tools and the inventory, prompt-build and session-end hooks", () => {
     const { tools, hooks } = load();
     assert.deepEqual(tools.map((tool) => [tool.name, tool.catalogMode]), [["lazy_load_tools", "direct-only"]]);
-    assert.deepEqual(hooks, ["llm_input"]);
+    assert.deepEqual(hooks, ["llm_input", "before_prompt_build", "session_end"]);
   });
 
   it("validates inputs and outputs at the transport boundary", async () => {
@@ -146,11 +148,11 @@ describe("registration through the OpenClaw feature runtime", () => {
     assert.deepEqual(plugins.entries["lazy-loading"].config, { agents: { "scout-local": { mode: "off", never: ["browser"] } } });
   });
 
-  it("surfaces stub failures as errors carrying the NOT_IMPLEMENTED prefix", async () => {
+  it("keeps only unfinished operations as typed NOT_IMPLEMENTED errors", async () => {
     const { call } = load();
     await assert.rejects(call("stats", {}), /\[lazy-loading:NOT_IMPLEMENTED\] stats is not implemented yet \(planned: F-09\)/u);
-    await assert.rejects(call("session-state", { sessionKey: "agent:a:main" }), /NOT_IMPLEMENTED/u);
-    await assert.rejects(call("reset-session", { agentId: "a" }), /NOT_IMPLEMENTED/u);
+    assert.deepEqual(await call("session-state", { sessionKey: "agent:a:main" }), { ok: true, result: { sessionKey: "agent:a:main", stickyTurns: 0, tools: [], misses: [] } });
+    assert.deepEqual(await call("reset-session", { agentId: "a" }), { ok: true, result: { cleared: 0 } });
     await assert.rejects(call("run-benchmark", { agentId: "a", prompt: "hi" }), /NOT_IMPLEMENTED/u);
   });
 });
