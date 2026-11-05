@@ -1,0 +1,173 @@
+{
+  "id": "lazy-loading",
+  "name": "Lazy Loading",
+  "description": "Load agent tools on demand to cut time-to-first-token.",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "Master switch for the whole plugin."
+      },
+      "defaultMode": {
+        "enum": [
+          "native",
+          "plugin",
+          "off"
+        ],
+        "description": "native: manage the global tools.toolSearch setting; plugin: narrow tools per turn via before_prompt_build (embedded runner only); off: host default."
+      },
+      "defaults": {
+        "type": "object",
+        "properties": {
+          "core": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.:-]*$",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "maxItems": 256,
+            "description": "Core tools for agents without their own list."
+          },
+          "never": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.:-]*$",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "maxItems": 256,
+            "description": "Never-loaded tools for agents without their own list."
+          },
+          "stickyTurns": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000,
+            "default": 10,
+            "description": "Turns an activated tool stays visible after its last use. 0 disables stickiness."
+          },
+          "predict": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "agents": {
+        "type": "object",
+        "patternProperties": {
+          "^.*$": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "description": "Enable lazy loading for this agent (default: inherit)."
+              },
+              "mode": {
+                "enum": [
+                  "native",
+                  "plugin",
+                  "off"
+                ],
+                "description": "native: manage the global tools.toolSearch setting; plugin: narrow tools per turn via before_prompt_build (embedded runner only); off: host default."
+              },
+              "core": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.:-]*$",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "maxItems": 256,
+                "description": "Tools that are always visible. Replaces defaults.core for this agent."
+              },
+              "never": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.:-]*$",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "maxItems": 256,
+                "description": "Tools that are never loaded. Replaces defaults.never for this agent."
+              },
+              "stickyTurns": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000,
+                "default": 10,
+                "description": "Turns an activated tool stays visible after its last use. 0 disables stickiness."
+              },
+              "predict": {
+                "type": "boolean",
+                "description": "Preload tools predicted from the user message."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "description": "Per-agent overrides keyed by agent id. Agents without an entry use defaultMode and defaults."
+      },
+      "predictor": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          },
+          "maxPredicted": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 50,
+            "default": 5
+          },
+          "minScore": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.3
+          }
+        },
+        "additionalProperties": false
+      },
+      "metrics": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          },
+          "retentionDays": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 365,
+            "default": 14
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "additionalProperties": false
+  },
+  "activation": {
+    "onStartup": true
+  },
+  "controlUi": {
+    "entry": "dist/control-ui/f6d68726d984276e0396cd021822415469ec1e788ad5a0ae25e0e982f931feec/index.js",
+    "styles": [
+      "dist/control-ui/f6d68726d984276e0396cd021822415469ec1e788ad5a0ae25e0e982f931feec/index.css"
+    ]
+  },
+  "contracts": {
+    "tools": [
+      "lazy_load_tools"
+    ]
+  }
+}

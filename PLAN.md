@@ -34,17 +34,17 @@ Principio: el set visible debe ser **estable** entre turnos (orden determinista,
 ## Functionality
 
 ### F-00 · Spike y medición base (bloquea todo)
-- [ ] Confirmar qué harness usa cada agente (embedded / Codex / Copilot) con los modelos `openai/gpt-5.6-*` y `openrouter/...`. Si es Codex, `toolsAllow` y `toolSearch` no aplican: documentar alternativa.
-- [ ] Confirmar si `tools.toolSearch` admite override por agente (`agents.entries.<id>.tools.toolSearch`) o solo global.
-- [ ] Confirmar si `toolsAllow` se recalcula entre llamadas al modelo dentro del mismo run o solo por turno de usuario (define si una tool cargada sirve en el mismo turno).
-- [ ] Medir baseline por agente: TTFT, nº de tools, bytes de schemas, tokens de prompt (Gateway con `--raw-stream`).
+- [x] Confirmar qué harness usa cada agente (embedded / Codex / Copilot) con los modelos `openai/gpt-5.6-*` y `openrouter/...`. Si es Codex, `toolsAllow` y `toolSearch` no aplican: documentar alternativa.
+- [x] Confirmar si `tools.toolSearch` admite override por agente (`agents.entries.<id>.tools.toolSearch`) o solo global.
+- [x] Confirmar si `toolsAllow` se recalcula entre llamadas al modelo dentro del mismo run o solo por turno de usuario (define si una tool cargada sirve en el mismo turno).
+- [x] Medir baseline por agente: TTFT, nº de tools, bytes de schemas, tokens de prompt (Gateway con `--raw-stream`). _Hecho con logs existentes (trajectory/rollouts) y medición estática; sin `--raw-stream` ni TTFT real: ver `docs/baseline.md`._
 - **Aceptación**: tabla baseline en `docs/baseline.md` y decisión de modo por defecto.
 
 ### F-01 · Scaffold del plugin
-- [ ] `openclaw plugins init lazy-loading --name "Lazy Loading" --type feature`.
-- [ ] `openclaw.plugin.json`: `id: "lazy-loading"`, `contracts.tools: ["lazy_load_tools"]`, `activation.onStartup: true`, `configSchema`.
-- [ ] `package.json` con `openclaw.compat.pluginApi` fijado a `2026.9.5`.
-- **Aceptación**: `npm run build && npm run validate` pasan; `openclaw plugins install .` lo carga.
+- [x] `openclaw plugins init lazy-loading --name "Lazy Loading" --type feature`.
+- [x] `openclaw.plugin.json`: `id: "lazy-loading"`, `contracts.tools: ["lazy_load_tools"]`, `activation.onStartup: true`, `configSchema`.
+- [x] `package.json` con `openclaw.compat.pluginApi` fijado a `2026.9.5`.
+- **Aceptación**: `npm run build && npm run validate` pasan; `openclaw plugins install .` lo carga (verificado con perfil aislado `OPENCLAW_STATE_DIR`; el manifiesto se genera con `npm run build`).
 
 ### F-02 · Esquema de configuración
 ```json5
@@ -65,13 +65,13 @@ plugins.entries["lazy-loading"].config = {
   metrics: { enabled: true, retentionDays: 14 }
 }
 ```
-- [ ] Validación con TypeBox; agentes sin entrada usan `defaultMode` y un `core` por defecto.
-- **Aceptación**: config inválida falla en `openclaw plugins validate` con mensaje claro.
+- [x] Validación con TypeBox; agentes sin entrada usan `defaultMode` y un `core` por defecto.
+- **Aceptación**: config inválida falla en `openclaw plugins validate` con mensaje claro. _Nota: el host valida la forma (JSON Schema, `openclaw config validate`); las reglas semánticas (core∩never, ids de agente) se aplican al cargar el plugin con `parseConfig`. `defaultMode` por defecto es `native` (ver `docs/baseline.md`)._
 
 ### F-03 · Catálogo de tools por agente
-- [ ] Resolver tools efectivas de cada agente tras políticas (`allow`, `alsoAllow`, profile, sandbox).
-- [ ] Calcular tamaño estimado de cada schema (bytes y tokens aprox.).
-- [ ] Generar descriptores compactos (nombre, descripción corta, firma de input).
+- [x] Resolver tools efectivas de cada agente tras políticas (`allow`, `alsoAllow`, profile, sandbox). _El host no expone una API a plugins externos (`tools.catalog` por gateway es solo para operadores): el inventario se observa en `llm_input` (post-política real) o lo aporta quien llama; ver `src/catalog/inventory.ts`._
+- [x] Calcular tamaño estimado de cada schema (bytes y tokens aprox.).
+- [x] Generar descriptores compactos (nombre, descripción corta, firma de input).
 - **Aceptación**: operación `catalog(agentId)` devuelve lista con `core | deferred | never` y tamaño.
 
 ### F-04 · Modo `plugin`: superficie mínima por turno
@@ -108,9 +108,9 @@ plugins.entries["lazy-loading"].config = {
 - **Aceptación**: operación `stats(agentId, since)` devuelve medias p50/p95 de TTFT antes/después.
 
 ### F-10 · Feature contract (operaciones compartidas)
-- [ ] Queries: `status`, `catalog`, `stats`, `sessionState`.
-- [ ] Actions: `setMode`, `setAgentEnabled`, `setToolClass` (core/deferred/never), `resetSession`, `runBenchmark`.
-- [ ] Eventos: `configChanged`, `statsUpdated`, `toolsLoaded`.
+- [x] Queries: `status`, `catalog`, `stats`, `sessionState`. _`status` y `catalog` implementadas; `stats` (F-09) y `sessionState` (F-06) son stubs con error tipado `NOT_IMPLEMENTED`. Ids en kebab-case (`session-state`): el SDK exige minúsculas. Ver `plugins/lazy-loading/docs/contract.md`._
+- [x] Actions: `setMode`, `setAgentEnabled`, `setToolClass` (core/deferred/never), `resetSession`, `runBenchmark`. _Las tres primeras implementadas; `resetSession` (F-06) y `runBenchmark` (F-11) son stubs._
+- [x] Eventos: `configChanged`, `statsUpdated`, `toolsLoaded` (+ `benchmark-progress`). _`config-changed` se emite ya; el resto cuando existan F-05/F-07/F-09/F-11._
 - **Aceptación**: UI, CLI y slash command usan solo estas operaciones.
 
 ### F-11 · Benchmark

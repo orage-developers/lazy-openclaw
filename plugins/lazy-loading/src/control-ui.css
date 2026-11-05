@@ -1,0 +1,2 @@
+.lazy-loading-page { display: grid; gap: 16px; padding: 24px; color: var(--text); }
+.lazy-loading-page output { white-space: pre-wrap; }
