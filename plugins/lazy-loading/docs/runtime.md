@@ -40,3 +40,35 @@ loader reports that boundary instead of inventing tool names or schemas. Full
 discovery needs an earlier complete observation or trusted supplied inventory.
 The native host tool-search route is the alternative for same-run discovery;
 automatic configuration of that route remains unfinished (F-08).
+
+## Real-provider verification (2026-11-05)
+
+Commit `8af012b` was built, validated, installed and hot-reloaded in the live
+Gateway. Regression tests: `npm test` passed 120/120; `npm run typecheck`,
+`npm run build`, `npm run validate` and `git diff --check` passed.
+
+Two isolated embedded runs used exactly `RETURN OK`, `openai/gpt-5.6-sol`, medium
+reasoning, normal service tier, no fallback and no warm-up: one request per mode.
+Both returned `OK`, had zero cache reads and left live configuration unchanged.
+
+- Plugin completely disabled: 65 wire tool definitions, 117,901 bytes of tool
+  JSON, 31,887 input tokens; client-observed TTFT 1,936 ms; host turn 6,380 ms.
+- Plugin enabled after the fix: 9 wire tool definitions, 13,356 bytes of tool
+  JSON, 12,287 input tokens; client-observed TTFT 1,529 ms; host turn 6,636 ms.
+
+The observer measured monotonic elapsed time from the client WebSocket send
+boundary to the first nonempty upstream `response.output_text.delta`, excluding
+connection setup and metadata-only events. This includes network, reasoning and
+client scheduling/instrumentation; it is not server-only inference latency.
+The same observer passed offline SSE and WebSocket tests. One sample per mode
+does not establish a stable or causal speedup; total turn duration did not fall.
+The nine visible tools were `apply_patch`, `edit`, `exec`, `lazy_load_tools`, `ls`,
+`message`, `process`, `read` and `write`. This verifies cold schema narrowing,
+not complete cold-start tool discovery (see the limitation above).
+
+Raw reports, wire counts, event timestamps, the measurement harness and its two
+offline tests are under
+`/tmp/opencode/sol56-medium-ttft-20261105-152118/`. No credentials, messages or
+full request bodies were added to the repository. Reverting `8af012b` and
+redeploying its predecessor removes this runtime correction without changing
+the user's Gateway service or agent configuration.
