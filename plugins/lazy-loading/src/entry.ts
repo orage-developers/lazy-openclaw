@@ -39,10 +39,15 @@ export function composeFeatureEntry(
     description: feature.description,
     configSchema: extra.configSchema,
     register(api: OpenClawPluginApi) {
+      // OpenClaw invokes plugin registration in `cli-metadata` mode while
+      // building command discovery/help. That API deliberately has no runtime;
+      // register the command shape only and leave feature setup for execution.
+      if (api.registrationMode === "cli-metadata") {
+        registerLazyLoadingCli(api);
+        return;
+      }
       feature.register(api);
       extra.register(api);
-      // Older host test doubles may omit CLI registration; supported OpenClaw
-      // versions always expose it. Keep feature setup independently testable.
       if (typeof api.registerCli === "function") registerLazyLoadingCli(api);
     },
   });

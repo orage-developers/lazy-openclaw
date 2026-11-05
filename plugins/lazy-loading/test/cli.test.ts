@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { Command } from "commander";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-entry";
 import type { FeatureHandlers } from "openclaw/plugin-sdk/feature-plugin";
+import pluginEntry from "../src/index.js";
 import type { LazyLoadingContract } from "../src/contract.js";
 import { bindCliHandlers, getCliHandlers } from "../src/cli/handler-bridge.js";
 import { registerLazyLoadingCli } from "../src/cli/register.js";
@@ -24,6 +26,36 @@ describe("CLI handler bridge", () => {
 });
 
 describe("lazy-loading CLI", () => {
+  it("declares parse-time roots in the plugin manifest", () => {
+    const manifest = JSON.parse(readFileSync(new URL("../../openclaw.plugin.json", import.meta.url), "utf8")) as {
+      cliCommands?: { name: string; description: string; hasSubcommands: boolean }[];
+    };
+    assert.deepEqual(manifest.cliCommands?.map(({ name }) => name), ["lazy-loading", "lazy"]);
+    assert.ok(manifest.cliCommands?.every(({ description, hasSubcommands }) => description.length > 0 && hasSubcommands));
+  });
+
+  it("registers only parse-time CLI metadata without touching unavailable runtime", () => {
+    const program = new Command();
+    const descriptors: { name: string; hasSubcommands: boolean }[] = [];
+    const runtime = new Proxy({}, { get() { throw new Error("runtime must not be read during CLI metadata"); } });
+    const api = {
+      id: "lazy-loading",
+      registrationMode: "cli-metadata",
+      get runtime() { return runtime; },
+      registerCli(registrar: (context: { program: Command }) => void, options: { descriptors: readonly { name: string; hasSubcommands: boolean }[] }) {
+        descriptors.push(...options.descriptors);
+        registrar({ program });
+      },
+      on() { throw new Error("feature setup must not run during CLI metadata"); },
+      registerTool() { throw new Error("runtime tools must not register during CLI metadata"); },
+    } as unknown as OpenClawPluginApi;
+
+    pluginEntry.register(api);
+
+    assert.deepEqual(descriptors.map(({ name }) => name), ["lazy-loading", "lazy"]);
+    assert.deepEqual(program.commands.map((command) => command.name()), ["lazy-loading", "lazy"]);
+  });
+
   it("registers lazy descriptors and dispatches commands through feature handlers at execution", async () => {
     const key = {};
     const program = new Command();
