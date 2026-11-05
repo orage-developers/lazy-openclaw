@@ -108,9 +108,9 @@ plugins.entries["lazy-loading"].config = {
 - **Aceptación**: operación `stats(agentId, since)` devuelve medias p50/p95 de TTFT antes/después.
 
 ### F-10 · Feature contract (operaciones compartidas)
-- [ ] Queries: `status`, `catalog`, `stats`, `sessionState`.
-- [ ] Actions: `setMode`, `setAgentEnabled`, `setToolClass` (core/deferred/never), `resetSession`, `runBenchmark`.
-- [ ] Eventos: `configChanged`, `statsUpdated`, `toolsLoaded`.
+- [x] Queries: `status`, `catalog`, `stats`, `sessionState`. _`status` y `catalog` implementadas; `stats` (F-09) y `sessionState` (F-06) son stubs con error tipado `NOT_IMPLEMENTED`. Ids en kebab-case (`session-state`): el SDK exige minúsculas. Ver `plugins/lazy-loading/docs/contract.md`._
+- [x] Actions: `setMode`, `setAgentEnabled`, `setToolClass` (core/deferred/never), `resetSession`, `runBenchmark`. _Las tres primeras implementadas; `resetSession` (F-06) y `runBenchmark` (F-11) son stubs._
+- [x] Eventos: `configChanged`, `statsUpdated`, `toolsLoaded` (+ `benchmark-progress`). _`config-changed` se emite ya; el resto cuando existan F-05/F-07/F-09/F-11._
 - **Aceptación**: UI, CLI y slash command usan solo estas operaciones.
 
 ### F-11 · Benchmark

@@ -28,7 +28,7 @@ export default defineControlUiPlugin({
         feature
           .invoke("status", {})
           .then((status) => {
-            if (!context.signal.aborted) output.textContent = `Plugin ready (v${status.version})`;
+            if (!context.signal.aborted) output.textContent = `Plugin ready (v${status.pluginVersion})`;
           })
           .catch((error: unknown) => {
             if (!context.signal.aborted) output.textContent = String(error);

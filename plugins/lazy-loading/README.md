@@ -28,6 +28,18 @@ openclaw plugins inspect lazy-loading
 
 Do not run `openclaw plugins install .` against your live profile while developing.
 
+## Host permissions
+
+The plugin observes the tools each agent exposes through the `llm_input` hook, which
+OpenClaw gates for non-bundled plugins. Grant it in `openclaw.json`:
+
+```json5
+{ plugins: { entries: { "lazy-loading": { hooks: { allowConversationAccess: true } } } } }
+```
+
+Without it the plugin still loads (the host logs `typed hook "llm_input" blocked`) and
+the `catalog` operation only works with an `inventory` supplied by the caller.
+
 ## Layout
 
 - `src/contract.ts`: the feature contract (operations and events). Stable surface.
