@@ -1,12 +1,37 @@
 # lazy-loading (OpenClaw plugin)
 
-Loads agent tools on demand to reduce the prompt sent before the first token.
+Narrows agent tool schemas to reduce the prompt sent before the first token.
 Target host: OpenClaw `2026.9.5` (experimental plugin APIs; the version is pinned in
 `package.json` `openclaw.compat.pluginApi` and `openclaw.build.openclawVersion`).
 
 Status: phase 1 (functionality) in progress. See `../../PLAN.md` for the roadmap,
 `docs/baseline.md` for the measured baseline and the default-mode decision, and
 `docs/contract.md` for the shared feature contract used by the CLI and the UI.
+
+## Installation by an agent
+
+Follow [AGENTS.md](AGENTS.md) for the authorized auto-setup workflow: inspect and
+back up the host, install the built archive, select compatible agents, apply
+configuration and verify health. The guide and supporting docs ship in the
+package. `AGENTS.md` is guidance for the installing agent, not an executable
+OpenClaw installation hook.
+
+## Verified behavior and remaining limit
+
+The runtime fix selects the actual turn model rather than the ambient primary,
+isolates config/state between registrations, and restricts a known embedded
+runtime to core + loader from the first turn, even without an inventory.
+
+One real-provider request per mode with GPT-5.6 Sol medium and `RETURN OK`
+confirmed **65 tools without the plugin vs. 9 with it**. Client-observed TTFT was
+1.936 s vs. 1.529 s; total turn duration was 6.380 s vs. 6.636 s. This is a single
+sample per mode, not evidence of a general latency improvement.
+
+**This is not complete lazy loading yet.** The loader cannot discover previously
+unseen tools hidden before `llm_input`. Full discovery needs an earlier full
+observation or trusted supplied inventory. Known activations apply next turn;
+Codex cannot enforce this plugin's restrictions, and automatic native tool-search
+setup remains unfinished. See [runtime semantics and measurement details](docs/runtime.md).
 
 ## Develop
 

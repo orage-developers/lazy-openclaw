@@ -78,13 +78,14 @@ plugins.entries["lazy-loading"].config = {
 - [x] Hook `before_prompt_build` devuelve `toolsAllow = core ∪ predichas ∪ activadas`, ordenado de forma determinista.
 - [x] Respetar que `toolsAllow` solo puede estrechar; nunca intentar añadir tools fuera de política.
 - [x] Saltar el hook (sin restringir) si el harness es Codex; también si es desconocido. _Pendiente: aviso de log único para Codex._
-- **Aceptación**: prueba unitaria verifica el set determinista; pendiente prueba host/proveedor real del payload.
+- **Aceptación**: verificada también contra proveedor real el 2026-11-05: GPT-5.6 Sol medium, `RETURN OK`, un request por modo, 65 tools sin plugin frente a 9 con plugin en el payload. Se corrigió la detección del modelo efectivo, el aislamiento entre registros y la restricción sin inventario inicial. Ver `plugins/lazy-loading/docs/runtime.md`.
 
 ### F-05 · Tool `lazy_load_tools`
 - [x] Input: `{ query?: string; names?: string[] }`. Busca en el catálogo (match léxico acotado o exact match) y activa las tools en el estado de la sesión.
 - [x] Output: tools activadas con firma compacta y aviso de que estarán disponibles en el próximo turno (F-00).
 - [x] Registrada como `direct-only` y siempre en `toolsAllow` cuando el modo plugin aplica.
 - **Aceptación**: prueba de servicio carga nombre exacto y verifica la disponibilidad en el siguiente build de prompt; pendiente recorrido host/modelo real.
+- **Límite pendiente**: no hay descubrimiento completo en frío. `llm_input` ocurre después del filtro; sin observación completa previa o inventario confiable proporcionado, el loader no puede descubrir tools ya ocultas. La reducción inicial no equivale a carga diferida completa.
 
 ### F-06 · Estado de sesión y expiración
 - [x] Guardar tools activadas por `sessionKey` con contador de turnos (`stickyTurns`) en memoria de proceso.
@@ -116,10 +117,11 @@ plugins.entries["lazy-loading"].config = {
 ### F-11 · Benchmark
 - [ ] Ejecutar un prompt contra un agente en modo `off` y en modo lazy, N veces, y comparar TTFT y tokens.
 - **Aceptación**: reporte reproducible; meta ≤10 s en tareas simples.
+- **Medición manual, no implementación de F-11**: Sol 5.6 medium, un request por modo sin warm-up, caché cero; TTFT cliente 1,936 s sin plugin y 1,529 s con plugin. No demuestra mejora general: duración total de turno 6,380 s y 6,636 s respectivamente. Detalles y definición de TTFT en `plugins/lazy-loading/docs/runtime.md`.
 
 ### F-12 · Tests
 - [x] Unit: predictor, cálculo de `toolsAllow`, expiración sticky y validación de config.
-- [ ] Integración: escenario con proveedor mock comparando payloads; prueba host/proveedor real aún pendiente.
+- [ ] Integración: escenario con proveedor mock comparando payloads. La comprobación puntual de payload y TTFT contra proveedor real ya se hizo; no sustituye esta suite automatizada.
 
 ---
 
