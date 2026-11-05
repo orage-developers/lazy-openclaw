@@ -1,15 +1,14 @@
 import type { Mode } from "./config/schema.js";
 
 /**
- * Which agent runtime executes an agent's turns. The hook context exposes no
- * harness id, and a restrictive `toolsAllow` makes the Codex app-server runtime
+ * Which agent runtime executes an agent's turns. A restrictive `toolsAllow` makes the Codex app-server runtime
  * fail the turn (docs/baseline.md, section 1.4), so the plugin resolves the
  * runtime from configuration and stays conservative when unsure.
  */
 export const HARNESSES = ["embedded", "codex", "copilot", "cli", "unknown"] as const;
 export type Harness = (typeof HARNESSES)[number];
 
-export const HARNESS_SOURCES = ["model-policy", "provider-policy", "auto-codex", "default", "no-model"] as const;
+export const HARNESS_SOURCES = ["runtime-context", "session-entry", "model-policy", "provider-policy", "auto-codex", "default", "no-model"] as const;
 export type HarnessSource = (typeof HARNESS_SOURCES)[number];
 
 export type HarnessResolution = {
@@ -21,6 +20,14 @@ export type HarnessResolution = {
 
 type Json = Record<string, unknown>;
 const isRecord = (value: unknown): value is Json => typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** Trusted host facts only, never prompt text or model-supplied tool arguments. */
+export type TurnRuntimeContext = {
+  modelProviderId?: string;
+  modelId?: string;
+  agentHarnessId?: string;
+  sessionEntry?: unknown;
+};
 
 function modelRefOf(model: unknown): string | undefined {
   const raw = typeof model === "string" ? model : isRecord(model) && typeof model.primary === "string" ? model.primary : undefined;
@@ -64,14 +71,28 @@ function modelPolicyRuntime(models: unknown, ref: string): string | undefined {
  * then `auto` (Codex claims `openai/*` when the codex plugin is not disabled;
  * everything else runs on the embedded runner).
  */
-export function resolveHarness(hostConfig: unknown, agentId: string): HarnessResolution {
+export function resolveHarness(hostConfig: unknown, agentId: string, turn: TurnRuntimeContext = {}): HarnessResolution {
   const config = isRecord(hostConfig) ? hostConfig : {};
   const agents = isRecord(config.agents) ? config.agents : {};
   const entries = isRecord(agents.entries) ? agents.entries : {};
   const entry = isRecord(entries[agentId]) ? (entries[agentId] as Json) : {};
   const defaults = isRecord(agents.defaults) ? agents.defaults : {};
 
-  const ref = modelRefOf(entry.model) ?? modelRefOf(defaults.model);
+  const session = isRecord(turn.sessionEntry) ? turn.sessionEntry : {};
+  // Runtime/session bindings outrank model policy, including an openclaw pin.
+  for (const [id, source] of [[turn.agentHarnessId, "runtime-context"], [session.agentHarnessId ?? session.agentRuntimeOverride, "session-entry"]] as const) {
+    if (typeof id === "string") {
+      const harness = harnessFromRuntimeId(id);
+      if (harness) return { harness, source };
+    }
+  }
+  const contextRef = turn.modelProviderId && turn.modelId ? modelRefOf(`${turn.modelProviderId}/${turn.modelId}`) : undefined;
+  // A partial effective route must not silently fall back to the ambient model.
+  if ((turn.modelProviderId || turn.modelId) && !contextRef) return { harness: "unknown", source: "no-model" };
+  const sessionProvider = session.providerOverride ?? session.modelProvider;
+  const sessionModel = session.modelOverride ?? session.model;
+  const sessionRef = typeof sessionProvider === "string" && typeof sessionModel === "string" ? modelRefOf(`${sessionProvider}/${sessionModel}`) : undefined;
+  const ref = contextRef ?? sessionRef ?? modelRefOf(entry.model) ?? modelRefOf(defaults.model);
   if (!ref) return { harness: "unknown", source: "no-model" };
   const provider = ref.split("/")[0] ?? "";
 

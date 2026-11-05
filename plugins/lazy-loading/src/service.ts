@@ -7,7 +7,7 @@ import type { Mode, RawConfig, ResolvedConfig } from "./config/schema.js";
 import { type ConfigIssue, formatIssues, parseConfig, resolveAgentConfig } from "./config/validate.js";
 import { CONTRACT_VERSION, type LazyLoadingContract } from "./contract.js";
 import { LazyLoadingError, notImplemented } from "./errors.js";
-import { resolveEffectiveMode, resolveHarness, type Harness } from "./harness.js";
+import { resolveEffectiveMode, resolveHarness, type Harness, type TurnRuntimeContext } from "./harness.js";
 import type { ConfigStore } from "./state/config-store.js";
 import { SessionStore } from "./state/session-store.js";
 import { LAZY_LOAD_TOOLS_NAME } from "./tools/lazy-load-tools.js";
@@ -19,6 +19,7 @@ export type ServiceDeps = {
   inventory: InventoryStore;
   /** Live OpenClaw config (not the plugin config); used to resolve each agent's runtime. */
   getHostConfig: () => unknown;
+  getSessionEntry?: (agentId: string, sessionKey: string) => unknown;
   events?: FeatureEventEmitter<LazyLoadingContract>;
   now?: () => number;
   sessions?: SessionStore;
@@ -216,22 +217,28 @@ export function createHandlers(deps: ServiceDeps): Handlers {
 }
 
 /** Resolve a conservative per-turn allow list. Unknown/Codex/CLI harnesses never receive toolsAllow. */
-export async function buildToolsAllow(deps: ServiceDeps, sessions: SessionStore, params: { agentId?: string; sessionKey?: string; message?: string }): Promise<string[] | undefined> {
+export async function buildToolsAllow(deps: ServiceDeps, sessions: SessionStore, params: TurnRuntimeContext & { agentId?: string; sessionKey?: string; message?: string }): Promise<string[] | undefined> {
   if (!params.agentId || !params.sessionKey) return undefined;
   const parsed = parseConfig(await deps.configStore.read());
   if (!parsed.ok) return undefined;
   const config = parsed.config;
   const agent = resolveAgentConfig(config, params.agentId);
-  const harness = resolveHarness(deps.getHostConfig(), params.agentId).harness;
+  let sessionEntry: unknown;
+  try { sessionEntry = deps.getSessionEntry?.(params.agentId, params.sessionKey); }
+  catch { return undefined; } // a failed binding lookup is not proof of an embedded turn
+  const harness = resolveHarness(deps.getHostConfig(), params.agentId, { ...params, sessionEntry: params.sessionEntry ?? sessionEntry }).harness;
   if (resolveEffectiveMode({ enabled: agent.enabled, pluginEnabled: config.enabled, mode: agent.mode, harness }).mode !== "plugin") return undefined;
   const catalog = buildCatalog({ agent, inventory: deps.inventory.get(params.agentId) });
-  if (!catalog.available) return undefined; // observed inventory is not a complete inventory guarantee
+  const eligible = new Set(catalog.entries.filter((entry) => entry.class === "deferred").map((entry) => entry.name));
+  sessions.retain(params.sessionKey, params.agentId, eligible);
   const state = sessions.advance(params.sessionKey, agent.stickyTurns, params.agentId);
   const predicted = agent.predict && config.predictor.enabled
     ? predictTools({ message: params.message ?? "", entries: catalog.entries, maxPredicted: config.predictor.maxPredicted, minScore: config.predictor.minScore, never: agent.never, core: agent.core })
     : [];
   if (predicted.length) sessions.activate(params.sessionKey, params.agentId, predicted.map((tool) => tool.name), agent.stickyTurns, (deps.now ?? Date.now)(), "predicted");
-  const allow = new Set([...catalog.entries.filter((entry) => entry.class === "core").map((entry) => entry.name), ...state.tools.map((tool) => tool.name), ...predicted.map((tool) => tool.name), LAZY_LOAD_TOOLS_NAME]);
+  // Configured core names are a policy restriction, not an invented inventory.
+  // The host intersects them with its approved surface, including on cold start.
+  const allow = new Set([...agent.core.filter((name) => !agent.never.includes(name)), ...catalog.entries.filter((entry) => entry.class === "core").map((entry) => entry.name), ...state.tools.map((tool) => tool.name), ...predicted.map((tool) => tool.name), LAZY_LOAD_TOOLS_NAME]);
   return [...allow].sort();
 }
 
@@ -241,7 +248,7 @@ export async function loadTools(deps: ServiceDeps, sessions: SessionStore, param
   if (!parsed.ok) throw new LazyLoadingError("CONFIG_INVALID", `fix the plugin config first: ${formatIssues(parsed.issues)}`);
   const agent = resolveAgentConfig(parsed.config, params.agentId);
   const catalog = buildCatalog({ agent, inventory: deps.inventory.get(params.agentId) });
-  if (!catalog.available) throw new LazyLoadingError("INVALID_ARGUMENT", "tool inventory unavailable; provide tools through catalog first");
+  if (!catalog.available) throw new LazyLoadingError("INVALID_ARGUMENT", "tool inventory unavailable: this host exposes only post-filter llm_input tools, not a pre-filter catalog. Hidden tools cannot be discovered on cold start; use native mode or a trusted host-provided inventory.");
   const deferred = catalog.entries.filter((entry) => entry.class === "deferred");
   let selected = params.names?.length ? deferred.filter((entry) => params.names!.includes(entry.name)) : [];
   if (!params.names?.length && params.query) {
@@ -250,7 +257,7 @@ export async function loadTools(deps: ServiceDeps, sessions: SessionStore, param
       .filter((item) => item.score > 0).sort((a, b) => b.score - a.score || a.entry.name.localeCompare(b.entry.name)).slice(0, 8).map(({ entry }) => entry);
   }
   const names = [...new Set(selected.map((entry) => entry.name))].slice(0, 16);
-  if (!names.length) return { text: "No eligible tools matched. Only deferred catalog tools can be loaded; never/core tools cannot be changed.", tools: [] };
+  if (!names.length) return { text: "No eligible tools matched. Only deferred catalog tools can be loaded; never/core tools cannot be changed. The catalog contains only previously observed or explicitly supplied tools; a cold, already-filtered run cannot discover hidden tool schemas.", tools: [] };
   sessions.activate(params.sessionKey, params.agentId, names, agent.stickyTurns, (deps.now ?? Date.now)());
   try { deps.events?.emit("tools-loaded", { sessionKey: params.sessionKey, agentId: params.agentId, tools: names, origin: "loaded", at: (deps.now ?? Date.now)() }); } catch { /* best effort */ }
   return { text: `Activated for the next turn (OpenClaw computes toolsAllow once per attempt; these cannot be called in this turn).`, tools: selected.map((entry) => ({ name: entry.name, signature: entry.signature, description: entry.description })) };

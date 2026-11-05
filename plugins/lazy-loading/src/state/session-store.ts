@@ -28,6 +28,13 @@ export class SessionStore {
     this.sessions.set(key, state);
     return current;
   }
+  /** Revalidate activations against current classification, not cached permissions. */
+  retain(key: string, agentId: string, eligible: ReadonlySet<string>): void {
+    const state = this.sessions.get(key);
+    if (!state) return;
+    if (state.agentId !== agentId) { this.sessions.delete(key); return; }
+    state.tools = state.tools.filter((tool) => eligible.has(tool.name));
+  }
   clear(sessionKey?: string, agentId?: string): number {
     if (sessionKey) return this.sessions.delete(sessionKey) ? 1 : 0;
     let cleared = 0;

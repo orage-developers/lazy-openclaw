@@ -25,6 +25,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 function normalizeOne(value: unknown): RawTool | undefined {
   if (!isRecord(value)) return undefined;
+  if (value.type === "function" && isRecord(value.function)) return normalizeOne(value.function);
   const name = typeof value.name === "string" ? value.name : typeof value.id === "string" ? value.id : undefined;
   if (!name) return undefined;
   const parameters = value.parameters ?? value.inputSchema ?? value.input_schema;
@@ -66,7 +67,7 @@ export function normalizeRawTools(input: unknown): RawTool[] {
 }
 
 /**
- * In-memory inventory of the tools each agent last exposed. The plugin has no
+ * In-memory inventory of the tools each agent has exposed. The plugin has no
  * supported API to ask the host for an agent's effective tools (the gateway
  * `tools.catalog` method is not available to external plugins), so the inventory
  * is fed by observation (`llm_input` hook) or provided by a caller that can.
@@ -77,7 +78,13 @@ export class InventoryStore {
   record(agentId: string, tools: unknown, origin: InventoryOrigin, now: number): ToolInventory | undefined {
     const normalized = normalizeRawTools(tools);
     if (normalized.length === 0) return undefined;
-    const inventory: ToolInventory = { agentId, tools: normalized, origin, capturedAt: now };
+    // llm_input runs AFTER toolsAllow. Absence from a narrowed observation is
+    // not revocation: retain deferred descriptors, but refresh tools we do see.
+    // An explicit caller-provided inventory is a replacement, not an observation.
+    const previous = origin === "observed-run" ? this.byAgent.get(agentId)?.tools ?? [] : [];
+    const toolsByName = new Map(previous.map((tool) => [tool.name, tool]));
+    for (const tool of normalized) toolsByName.set(tool.name, tool);
+    const inventory: ToolInventory = { agentId, tools: [...toolsByName.values()], origin, capturedAt: now };
     this.byAgent.set(agentId, inventory);
     return inventory;
   }

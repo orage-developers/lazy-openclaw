@@ -70,6 +70,22 @@ describe("resolveHarness", () => {
     assert.equal(resolveHarness(undefined, "a").harness, "unknown");
     assert.equal(resolveHarness("nonsense", "a").harness, "unknown");
   });
+
+  it("uses the actual turn model, not the agent's ambient primary", () => {
+    const config = structuredClone(hostConfig);
+    config.agents.defaults.models["openai/gpt-6-astra"].agentRuntime.id = "openclaw";
+    assert.equal(resolveHarness(config, "coordinator", { modelProviderId: "openai", modelId: "gpt-6-astra" }).harness, "embedded");
+    assert.equal(resolveHarness(config, "pinned", { modelProviderId: "openai", modelId: "gpt-5.6-luna" }).harness, "codex");
+    assert.equal(resolveHarness(config, "pinned", { modelProviderId: "openai" }).harness, "unknown");
+  });
+
+  it("honours trusted runtime and session bindings before model policy", () => {
+    assert.equal(resolveHarness(hostConfig, "pinned", { agentHarnessId: "codex" }).harness, "codex");
+    assert.equal(resolveHarness(hostConfig, "pinned", { sessionEntry: { agentHarnessId: "codex" } }).harness, "codex");
+    assert.equal(resolveHarness(hostConfig, "pinned", { sessionEntry: { agentRuntimeOverride: "claude-cli" } }).harness, "cli");
+    assert.equal(resolveHarness(hostConfig, "coordinator", { sessionEntry: { modelProvider: "openai", model: "gpt-6-astra" } }).harness, "embedded");
+    assert.equal(resolveHarness(hostConfig, "pinned", { agentHarnessId: "new-runtime" }).harness, "unknown");
+  });
 });
 
 describe("resolveEffectiveMode", () => {

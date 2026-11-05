@@ -122,6 +122,20 @@ describe("inventory normalization", () => {
     assert.deepEqual(tools.map((entry) => entry.name), ["sessions_spawn", "read", "write"]);
   });
 
+  it("normalizes OpenAI function wrappers", () => {
+    assert.deepEqual(normalizeRawTools([{ type: "function", function: { name: "read", parameters: { type: "object" } } }]), [{ name: "read", parameters: { type: "object" } }]);
+  });
+
+  it("merges restricted observations, refreshes descriptors, and replaces provided inventories", () => {
+    const store = new InventoryStore();
+    store.record("a", [tool("read"), tool("browser")], "observed-run", 1);
+    store.record("a", [tool("read", { description: "Updated" })], "observed-run", 2);
+    assert.deepEqual(store.get("a")?.tools.map((tool) => tool.name), ["read", "browser"]);
+    assert.equal(store.get("a")?.tools[0]?.description, "Updated");
+    store.record("a", [tool("read")], "provided", 3);
+    assert.deepEqual(store.get("a")?.tools.map((tool) => tool.name), ["read"]);
+  });
+
   it("stores the latest inventory per agent and ignores empty reports", () => {
     const store = new InventoryStore();
     assert.equal(store.record("a", [], "observed-run", 1), undefined);

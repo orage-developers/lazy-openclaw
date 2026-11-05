@@ -54,10 +54,10 @@ function pluginConfigOf(hostConfig: unknown): unknown {
  * planner decide how to apply them (`afterWrite: auto`).
  */
 export class HostConfigStore implements ConfigStore {
-  constructor(private readonly config: HostConfigRuntime) {}
+  constructor(private readonly config: HostConfigRuntime, private readonly getHostConfig = () => config.current()) {}
 
   async read(): Promise<unknown> {
-    const value = pluginConfigOf(this.config.current());
+    const value = pluginConfigOf(this.getHostConfig());
     return value === undefined ? undefined : structuredClone(value);
   }
 
