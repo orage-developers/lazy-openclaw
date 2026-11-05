@@ -1,4 +1,4 @@
-# OpenClaw Lazy Loading
+![Plugin logo](./public/plugin-logo.png)
 
 [![CI](https://github.com/orage-developers/lazy-openclaw/actions/workflows/ci.yml/badge.svg)](https://github.com/orage-developers/lazy-openclaw/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
