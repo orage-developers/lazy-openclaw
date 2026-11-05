@@ -41,10 +41,10 @@ Principio: el set visible debe ser **estable** entre turnos (orden determinista,
 - **Aceptación**: tabla baseline en `docs/baseline.md` y decisión de modo por defecto.
 
 ### F-01 · Scaffold del plugin
-- [ ] `openclaw plugins init lazy-loading --name "Lazy Loading" --type feature`.
-- [ ] `openclaw.plugin.json`: `id: "lazy-loading"`, `contracts.tools: ["lazy_load_tools"]`, `activation.onStartup: true`, `configSchema`.
-- [ ] `package.json` con `openclaw.compat.pluginApi` fijado a `2026.9.5`.
-- **Aceptación**: `npm run build && npm run validate` pasan; `openclaw plugins install .` lo carga.
+- [x] `openclaw plugins init lazy-loading --name "Lazy Loading" --type feature`.
+- [x] `openclaw.plugin.json`: `id: "lazy-loading"`, `contracts.tools: ["lazy_load_tools"]`, `activation.onStartup: true`, `configSchema`.
+- [x] `package.json` con `openclaw.compat.pluginApi` fijado a `2026.9.5`.
+- **Aceptación**: `npm run build && npm run validate` pasan; `openclaw plugins install .` lo carga (verificado con perfil aislado `OPENCLAW_STATE_DIR`; el manifiesto se genera con `npm run build`).
 
 ### F-02 · Esquema de configuración
 ```json5

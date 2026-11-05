@@ -1,0 +1,25 @@
+{
+  "id": "lazy-loading",
+  "name": "Lazy Loading",
+  "description": "Load agent tools on demand to cut time-to-first-token.",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  },
+  "activation": {
+    "onStartup": true
+  },
+  "controlUi": {
+    "entry": "dist/control-ui/391758a8e41cab64074efecf8d737c935720903d7ace48e746d1c466ca6fc050/index.js",
+    "styles": [
+      "dist/control-ui/391758a8e41cab64074efecf8d737c935720903d7ace48e746d1c466ca6fc050/index.css"
+    ]
+  },
+  "contracts": {
+    "tools": [
+      "lazy_load_tools"
+    ]
+  }
+}
