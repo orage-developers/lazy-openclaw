@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 import { Command } from "commander";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-entry";
 import type { FeatureHandlers } from "openclaw/plugin-sdk/feature-plugin";
+import { clearConfigCache } from "openclaw/plugin-sdk/config-runtime";
 import pluginEntry from "../src/index.js";
 import type { LazyLoadingContract } from "../src/contract.js";
 import { bindCliHandlers, getCliHandlers } from "../src/cli/handler-bridge.js";
@@ -54,6 +57,48 @@ describe("lazy-loading CLI", () => {
 
     assert.deepEqual(descriptors.map(({ name }) => name), ["lazy-loading", "lazy"]);
     assert.deepEqual(program.commands.map((command) => command.name()), ["lazy-loading", "lazy"]);
+  });
+
+  it("executes status from local config when metadata registration has no bound handlers", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "lazy-loading-cli-state-"));
+    const configPath = join(stateDir, "openclaw.json");
+    const previousStateDir = process.env.OPENCLAW_STATE_DIR;
+    const previousConfigPath = process.env.OPENCLAW_CONFIG_PATH;
+    writeFileSync(configPath, JSON.stringify({
+      plugins: { entries: { "lazy-loading": { enabled: true, config: { enabled: true, defaultMode: "plugin" } } } },
+      agents: { entries: { coordinator: {} } },
+    }));
+    process.env.OPENCLAW_STATE_DIR = stateDir;
+    process.env.OPENCLAW_CONFIG_PATH = configPath;
+    clearConfigCache();
+
+    const program = new Command();
+    const runtime = { config: {} };
+    const api = {
+      id: "lazy-loading",
+      registrationMode: "discovery",
+      get runtime() { return runtime; },
+      registerCli(registrar: (context: { program: Command }) => void) { registrar({ program }); },
+    } as unknown as OpenClawPluginApi;
+    const printed: string[] = [];
+    const previousLog = console.log;
+    console.log = (...args: unknown[]) => printed.push(args.join(" "));
+    try {
+      registerLazyLoadingCli(api);
+      await program.parseAsync(["node", "openclaw", "lazy-loading", "status", "--agent", "coordinator", "--json"]);
+      const result = JSON.parse(printed[0] ?? "{}") as { configValid: boolean; agents: { agentId: string }[] };
+      assert.equal(result.configValid, true);
+      assert.deepEqual(result.agents.map(({ agentId }) => agentId), ["coordinator"]);
+    } finally {
+      console.log = previousLog;
+      clearConfigCache();
+      if (previousStateDir === undefined) delete process.env.OPENCLAW_STATE_DIR;
+      else process.env.OPENCLAW_STATE_DIR = previousStateDir;
+      if (previousConfigPath === undefined) delete process.env.OPENCLAW_CONFIG_PATH;
+      else process.env.OPENCLAW_CONFIG_PATH = previousConfigPath;
+      rmSync(stateDir, { recursive: true, force: true });
+      clearConfigCache();
+    }
   });
 
   it("registers lazy descriptors and dispatches commands through feature handlers at execution", async () => {

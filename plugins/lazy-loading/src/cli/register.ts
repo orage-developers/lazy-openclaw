@@ -2,6 +2,7 @@ import type { OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-entry";
 import type { FeatureInvocationContext } from "openclaw/plugin-sdk/feature-plugin";
 import type { LazyLoadingContract } from "../contract.js";
 import { getCliHandlers } from "./handler-bridge.js";
+import { getLocalCliHandlers } from "./local-handlers.js";
 
 type CliApi = Pick<OpenClawPluginApi, "registerCli">;
 type CliRegistrarContext = Parameters<Parameters<CliApi["registerCli"]>[0]>[0];
@@ -40,11 +41,28 @@ function isCatalog(value: unknown): value is { agentId: string; available: boole
   return typeof value === "object" && value !== null && "agentId" in value && "available" in value && "entries" in value && Array.isArray(value.entries) && "summary" in value;
 }
 
-function registerRoot(program: CliRegistrarContext["program"], alias: boolean, api: OpenClawPluginApi): void {
+function localFallbackIsRequired(error: unknown): boolean {
+  return error instanceof Error && (
+    error.message.includes("handlers were not bound during plugin setup") ||
+    error.message.includes("runtime is intentionally unavailable during \"cli-metadata\"")
+  );
+}
+
+function registerRoot(program: CliRegistrarContext["program"], alias: boolean, api: OpenClawPluginApi, localConfigMode: boolean): void {
   const name = alias ? "lazy" : "lazy-loading";
   const root = program.command(name).description(alias ? "Manage lazy-loading tools (alias)" : "Manage lazy-loading tools");
   const invoke = async (operation: keyof LazyLoadingContract["operations"], input: Record<string, unknown>) => {
-    const handlers = getCliHandlers(api.runtime.config as object);
+    let handlers: Awaited<ReturnType<typeof getLocalCliHandlers>>;
+    if (localConfigMode) {
+      handlers = getLocalCliHandlers();
+    } else {
+      try {
+        handlers = getCliHandlers(api.runtime.config as object);
+      } catch (error) {
+        if (!localFallbackIsRequired(error)) throw error;
+        handlers = getLocalCliHandlers();
+      }
+    }
     const handler = handlers[operation] as (arg: Record<string, unknown>, context: FeatureInvocationContext) => Promise<unknown>;
     return handler(input, { source: "command", api, command: {} } as CliCommandContext);
   };
@@ -99,8 +117,9 @@ function registerRoot(program: CliRegistrarContext["program"], alias: boolean, a
 }
 
 export function registerLazyLoadingCli(api: OpenClawPluginApi): void {
+  const localConfigMode = api.registrationMode === "cli-metadata";
   api.registerCli(({ program }) => {
-    registerRoot(program, false, api);
-    registerRoot(program, true, api);
+    registerRoot(program, false, api, localConfigMode);
+    registerRoot(program, true, api, localConfigMode);
   }, { commands: ["lazy-loading", "lazy"], descriptors });
 }
