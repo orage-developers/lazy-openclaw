@@ -1,5 +1,5 @@
 import { defineFeaturePlugin } from "openclaw/plugin-sdk/feature-plugin";
-import { emptyPluginConfigSchema } from "openclaw/plugin-sdk/plugin-entry";
+import { pluginConfigSchema } from "./config/plugin-schema.js";
 import { contract } from "./contract.js";
 import { composeFeatureEntry } from "./entry.js";
 import { LAZY_LOAD_TOOLS_DESCRIPTION, LAZY_LOAD_TOOLS_NAME, LazyLoadToolsParams } from "./tools/lazy-load-tools.js";
@@ -16,7 +16,7 @@ const feature = defineFeaturePlugin({
 });
 
 export default composeFeatureEntry(feature, {
-  configSchema: emptyPluginConfigSchema,
+  configSchema: pluginConfigSchema,
   register(api) {
     // Scaffold stub; the real implementation lands with F-05.
     api.registerTool({

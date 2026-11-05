@@ -65,8 +65,8 @@ plugins.entries["lazy-loading"].config = {
   metrics: { enabled: true, retentionDays: 14 }
 }
 ```
-- [ ] Validación con TypeBox; agentes sin entrada usan `defaultMode` y un `core` por defecto.
-- **Aceptación**: config inválida falla en `openclaw plugins validate` con mensaje claro.
+- [x] Validación con TypeBox; agentes sin entrada usan `defaultMode` y un `core` por defecto.
+- **Aceptación**: config inválida falla en `openclaw plugins validate` con mensaje claro. _Nota: el host valida la forma (JSON Schema, `openclaw config validate`); las reglas semánticas (core∩never, ids de agente) se aplican al cargar el plugin con `parseConfig`. `defaultMode` por defecto es `native` (ver `docs/baseline.md`)._
 
 ### F-03 · Catálogo de tools por agente
 - [ ] Resolver tools efectivas de cada agente tras políticas (`allow`, `alsoAllow`, profile, sandbox).
