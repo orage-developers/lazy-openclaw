@@ -48,6 +48,7 @@ jobs:
           echo "plugin=${plugin}" >> "$GITHUB_OUTPUT"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "dir=${dir}" >> "$GITHUB_OUTPUT"
+          echo "private=$(node -p "Boolean(require('./${dir}/package.json').private)")" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@v4
         with:
@@ -76,7 +77,7 @@ jobs:
             --verify-tag
 
       - name: Publish to npm
-        if: ${{ env.HAS_NPM_TOKEN == 'true' }}
+        if: ${{ env.HAS_NPM_TOKEN == 'true' && steps.meta.outputs.private != 'true' }}
         working-directory: ${{ steps.meta.outputs.dir }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
